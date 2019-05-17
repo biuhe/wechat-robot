@@ -4,6 +4,7 @@ import _thread
 from datetime import datetime
 
 import itchat, time
+import requests
 from itchat.content import *
 from apscheduler.schedulers.blocking import BlockingScheduler
 
@@ -38,10 +39,12 @@ def meow(threadName, delay):
         print('群组：')
         print(msg)
         if msg['isAt']:
-            test = msg['Text']
+            text = msg['Text']
             act_name = msg['ActualNickName']
-            if str(test).find('提醒') > 0:
-                new_jobs(sched, test, act_name)
+            if str(text).find('提醒') > 0:
+                new_jobs(sched, text, act_name)
+            elif str(text).find('天气') > 0:
+                weather(text)
 
     # itchat.send_msg(notice, toUserName=biu)
     # 保持登陆状态
@@ -55,13 +58,26 @@ def jobs(threadName, delay):
     # 订餐 - 每周六12点、21点提醒我订一星期的饭
     sched.add_job(func=job_ordering, trigger='cron', day_of_week='sat', hour=12, minute=00)
     sched.add_job(func=job_ordering, trigger='cron', day_of_week='sat', hour=21, minute=00)
+    # 午餐
+    sched.add_job(func=job_have_lunch, trigger='cron', day_of_week='mon-fri', hour=11, minute=45)
     # 午睡 - 每天中午12点45分提醒我睡觉
     sched.add_job(func=job_siesta, trigger='cron', day_of_week='mon-fri', hour=12, minute=45)
     # 种树 - 每天七点半提醒我收能量
     sched.add_job(func=job_plant_trees, trigger='cron', day_of_week='mon-fri', hour=7, minute=30)
+    # 下班
+    sched.add_job(func=job_plant_trees, trigger='cron', day_of_week='mon-fri', hour=17, minute=55)
     # 喂鸡 - 每隔4小时提醒我喂鸡
     sched.add_job(func=job_siesta, trigger='interval', hours=4, minutes=30)
+    # 休息
+    sched.add_job(func=job_rest, trigger='interval', minutes=30)
     sched.start()
+
+
+# 午餐
+def job_have_lunch():
+    notice = '现在是北京时间：' + times + " " + get_week_day(datetime.now()) \
+             + '\n阿尔法猫提醒你：到点吃饭啦\n'
+    itchat.send_msg(notice, toUserName=alpha_meow)
 
 
 # 订餐提醒定时器
@@ -94,6 +110,20 @@ def job_feeding_chickens():
     itchat.send_msg(notice, toUserName=alpha_meow)
 
 
+# 下班
+def job_off_duty():
+    notice = '现在是北京时间：' + times + " " + get_week_day(datetime.now()) \
+             + '\n阿尔法猫提醒你：到点下班回家撸猫啦'
+    itchat.send_msg(notice, toUserName=alpha_meow)
+
+
+# 休息
+def job_rest():
+    notice = '现在是北京时间：' + times + " " + get_week_day(datetime.now()) \
+             + '\n阿尔法猫提醒你：别太忙了，要起来走走动动，喝杯水，休息一下。'
+    itchat.send_msg(notice, toUserName=alpha_meow)
+
+
 # 新建提醒
 def new_jobs(sched, text, act_name):
     arr = text.split('/')
@@ -119,6 +149,40 @@ def job_notice(obj='我', act_name=None, todo=None):
     notice = '现在是北京时间：' + times + " " + get_week_day(datetime.now()) \
              + '\n阿尔法猫提醒你：' + todo + '\n @' + obj + '  '
     itchat.send_msg(notice, toUserName=alpha_meow)
+
+
+def weather(msg):
+    arr = msg.split('/')
+    if len(arr) > 1:
+        location = arr[1]
+        if location == '今天':
+            location = '广州'
+
+        args = {'location': location, 'key': '12d04dfd2f514c158f6b69291225576e'}
+        res = requests.get("https://free-api.heweather.net/s6/weather/now", params=args)
+        if res.status_code == 200:
+            result = res.json()
+            # 体感温度，默认单位：摄氏度
+            fl = result['HeWeather6'][0].get('now')['fl']
+            # 温度，默认单位：摄氏度
+            tmp = result['HeWeather6'][0].get('now')['tmp']
+            # 实况天气状况描述
+            cond_txt = result['HeWeather6'][0].get('now')['cond_txt']
+
+            if int(fl) <= 20:
+                remind = '记得多穿点衣服哦'
+            elif int(fl) >= 28:
+                remind = '记得多补水，注意防晒'
+            else:
+                remind = '要开开心心的呢'
+
+            notice = '现在是北京时间：' + times + " " + get_week_day(datetime.now()) \
+                     + '\n' + location + '天气：' + cond_txt + "，气温：" + tmp + "°C，体感温度：" + fl + '°C' \
+                     + '\n阿尔法猫提醒你：' + remind
+            itchat.send_msg(notice, toUserName=alpha_meow)
+        else:
+            notice = '天气预报异常啦，Biubiu快去看看'
+            itchat.send_msg(notice, toUserName=alpha_meow)
 
 
 # 创建两个线程
